@@ -16,12 +16,14 @@ def generate_shape():#随机生成5维以内的shape
   return tuple(shape)
 
 def generate_data(shape,dtype):#根据shape和类型生成
-  if dtype in [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16]:
+  if dtype in [np.int8, np.int16, np.int32, np.int64]:
+      input_data = np.random.randint(-10, 10, size=shape).astype(dtype)
+  elif dtype in [np.uint8,np.uint16,np.uint32,np.uint64]:
       input_data = np.random.randint(0, 10, size=shape).astype(dtype)
   elif dtype == np.bool_:
       input_data = np.random.choice([True, False], size=shape).astype(dtype)
   else:
-      input_data = np.random.randn(*shape).astype(dtype)
+      input_data = np.random.uniform(low=-0.999, high=10, size=shape).astype(dtype)
   return input_data
 
 def check(arr1, arr2, threshold=1e-3):
@@ -94,14 +96,14 @@ def test_any_different_dtypes(mode):
       torch_res=None
       print(f"当前数据类型为{ms_type}:")
       try:
-        ms_res=ms.mint.tan(ms_input)
+        ms_res=ms.mint.special.round(ms_input)
         print(ms_res)
       except Exception as e:
         print(f"Mindspore不支持{ms_type}类型")
         print(e)
             
       try:
-        torch_res=torch.tan(torch_input)
+        torch_res=torch.round(torch_input)
         print(torch_res)
       except Exception as e:
         print(f"Torch不支持{torch_type}类型")
@@ -114,9 +116,9 @@ def test_any_random_input_fixed_dtype(mode):
     ms.set_context(mode=mode)
 
     #100次随机生成数据，看是否有输出误差
-    types=[np.float16, np.float32, np.float64, np.int8, np.int16, np.int32, np.int64, np.bool_]
-    ms_dtypes = [ms.float16, ms.float32, ms.float64, ms.int8, ms.int16, ms.int32, ms.int64, ms.bool_]
-    torch_dtypes = [torch.float16, torch.float32, torch.float64,torch.int8, torch.int16, torch.int32, torch.int64,torch.bool]
+    types=[np.float16, np.float32, np.float64, np.int32, np.int64]
+    ms_dtypes = [ms.float16, ms.float32, ms.float64, ms.int32, ms.int64]
+    torch_dtypes = [torch.float16, torch.float32, torch.float64, torch.int32, torch.int64]
     np.set_printoptions(formatter={'float': '{: 0.5f}'.format})
     flag=True
     for i,type in enumerate(types):
@@ -124,13 +126,13 @@ def test_any_random_input_fixed_dtype(mode):
         ms_type=ms_dtypes[i]
         torch_type=torch_dtypes[i]
         for _ in range(100):
-#           shape=(1,1)
+#           shape=(5,1)
           shape=generate_shape()
           inputs=generate_data(shape,type)
           ms_inputs = ms.Tensor(inputs,ms_type)
           torch_inputs = torch.tensor(inputs,dtype=torch_type)
-          ms_res = ms.mint.tan(ms_inputs)
-          torch_res=torch.tan(torch_inputs)
+          ms_res = ms.mint.special.round(ms_inputs)
+          torch_res=torch.round(torch_inputs)
 #           print(f"torch_res:\n{torch_res}\nms_res:\n{ms_res}")
           #转为numpy数组进行比较
           ms_res1=ms_res.asnumpy()
@@ -142,29 +144,32 @@ def test_any_random_input_fixed_dtype(mode):
 #             print("torch_res:",torch_res)
 #             print("ms_res:",ms_res)
 #             print("diff:",diff)
-            print(f"当输入类型为{type}时，输出误差为{min(diff)}~{max(diff)}")
+            if diff is not None:
+                print(f"当输入类型为{type}时，输出误差为{min(diff)}~{max(diff)}")
+            else:
+                print(f"当输入类型为{type}时，输出误差为{diff}")
     assert flag
 
 @pytest.mark.parametrize('mode', [ms.GRAPH_MODE, ms.PYNATIVE_MODE])
 def test_any_different_para(mode):
     """测试固定shape，固定输入值，不同输入参数（string\bool等类型），两个框架的支持度"""
     print(f"---------------------------3.test_any_different_para(mode={mode})-------------------------")
-    assert True#由于tan只有input参数，因此不再重复test_any_different_dtypes的测试
+    assert True#由于round只有input参数，因此不再重复test_any_different_dtypes的测试
 
 @pytest.mark.parametrize('mode', [ms.GRAPH_MODE, ms.PYNATIVE_MODE])
 def test_any_wrong_input(mode):
     """测试随机混乱输入，报错信息的准确性"""
     print(f"---------------------------4.test_any_wrong_input(mode={mode})-------------------------")
     ms.set_context(mode=mode)
-    #4.1特殊数据nan或inf
-    torch_input=torch.tensor([float("nan"),float('inf'),float('-inf')]) 
-    ms_input=ms.Tensor([float("nan"),float('inf'),float('-inf')]) 
-    print("\n特殊数据nan或inf：")
+    #4.1特殊数据nan或inf、定义域外的值
+    torch_input=torch.tensor([float("nan"),float('inf'),float('-inf'),-1,-2,-1000,-10000]) 
+    ms_input=ms.Tensor([float("nan"),float('inf'),float('-inf'),-1,-2,-1000,-10000]) 
+    print(f"\n特殊数据nan或inf:{torch_input}")
     torch_res=None
     ms_res=None
     try:
-      torch_res=torch.tan(torch_input)
-      ms_res=ms.mint.tan(ms_input)
+      torch_res=torch.round(torch_input)
+      ms_res=ms.mint.special.round(ms_input)
       print(torch_res)
       print(ms_res)
     except Exception as e:
@@ -183,13 +188,13 @@ def test_any_wrong_input(mode):
       print(f"当输入是{inp}时，")
       print("PyTorch：",end="")
       try:
-        torch_res=torch.tan(inp)
+        torch_res=torch.round(inp)
         print(torch_res)  
       except Exception as e:
         print(e)
       print("MindSpore：",end="")
       try:
-        ms_res=ms.mint.tan(inp)
+        ms_res=ms.mint.special.round(inp)
         print(ms_res)  
       except Exception as e:
         print(e)
@@ -220,10 +225,10 @@ def test_any_forward_back(mode):
         ms_inp=ms.Tensor(input_data,ms_type)
 
         def forward_pt(x):
-            return torch.tan(x)
+            return torch.round(x)
 
         def forward_ms(x):
-            return ms.mint.tan(x)
+            return ms.mint.special.round(x)
         
         #5.1测试正向推理结果是否小于1e-3
         torch_res=forward_pt(torch_inp)
@@ -241,30 +246,11 @@ def test_any_forward_back(mode):
                 print(f"当输入类型为{type}时，前向传播输出误差为{diff}")
         assert check2(np.asarray(torch_res.detach()),ms_res.asnumpy())
 
-        #5.2测试反向传播梯度
-        torch_res.backward(torch.ones_like(torch_res))
-        torch_inp_grad=torch_inp.grad
-        grad_fn = ms.value_and_grad(forward_ms)
-        _, gradient_ms = grad_fn(ms_inp)
-        ms_inp_grad=gradient_ms
-#         print(torch_inp_grad,ms_inp_grad)
-        f,diff=check(np.asarray(torch_inp_grad.detach()),ms_inp_grad.asnumpy())
-        if not f:
-            flag=False
-#             print("input_data:",input_data)
-#             print("torch_res:",torch_res)
-#             print("ms_res:",ms_res)
-#             print("ms_inp_grad:",ms_inp_grad)
-#             print("torch_inp_grad:",torch_inp_grad)
-#             print("diff:",diff)
-            if diff is not None:
-                print(f"当输入类型为{type}时，梯度输出误差为{min(diff)}~{max(diff)}")
-            else:
-                print(f"当输入类型为{type}时，梯度输出误差为{diff}")
+        #5.2反向传播梯度均为0，因此不再测试
     assert flag
       
 if __name__=="__main__":
 #     test_any_different_dtypes(ms.PYNATIVE_MODE)
-    test_any_random_input_fixed_dtype(ms.PYNATIVE_MODE)
-#     test_any_wrong_input(ms.PYNATIVE_MODE)
+#     test_any_random_input_fixed_dtype(ms.PYNATIVE_MODE)
+    test_any_wrong_input(ms.PYNATIVE_MODE)
 #     test_any_forward_back(ms.PYNATIVE_MODE)
